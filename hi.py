@@ -1,11 +1,13 @@
 import openai
 import csv
 import time
+import os
+import string
 from tqdm import tqdm
 import openai.error
 
 # Initialize the OpenAI API client
-openai.api_key = "YOUR_OPEN_AI_KEY"
+openai.api_key = "YOUR_API_kEY"
 
 def get_topic_and_links(filename):
     with open(filename, newline='', encoding='utf-8') as file:
@@ -18,7 +20,7 @@ def make_api_call(prompt, max_tokens, conversation_history="", retries=3, delay=
     for attempt in range(retries):
         try:
             response = openai.ChatCompletion.create(
-                model="gpt-4",
+                model="gpt-4-1106-preview",
                 messages=[
                     {
                         "role": "system",
@@ -33,26 +35,69 @@ def make_api_call(prompt, max_tokens, conversation_history="", retries=3, delay=
             )
             new_conversation_history = conversation_history + response['choices'][0]['message']['content']
             return response['choices'][0]['message']['content'], new_conversation_history
-        except openai.error.Timeout as e:
-            print(f"Request timed out, retrying in {delay} seconds... ({attempt + 1}/{retries})")
+        except openai.error.OpenAIError as e:
+            print(f"API error: {e}, attempting again in {delay} seconds... ({attempt + 1}/{retries})")
             time.sleep(delay)
-    print(f"Failed to complete the request after {retries} retries due to timeout.")
+    print(f"Request failed after {retries} attempts.")
     return None, conversation_history
 
+def generate_image(prompt):
+    try:
+        response = openai.Image.create(
+            model="dall-e-3",
+            prompt=prompt,
+            size="1024x1024",
+            quality="standard",
+            n=1
+        )
+        image_url = response['data'][0]['url']
+        return image_url
+    except openai.error.OpenAIError as e:
+        print(f"Failed to generate image due to an API error: {e}")
+        return None
+
+def sanitize_filename(filename):
+    valid_chars = "-_.() %s%s" % (string.ascii_letters, string.digits)
+    filename = ''.join(c for c in filename if c in valid_chars)
+    filename = filename.replace(' ', '_')  # replace spaces with underscores for Windows compatibility
+    return filename
+
 def main():
-    for idx, (topic, internal_links) in enumerate(get_topic_and_links("keywords.csv"), start=1):
-        print(f"Processing {idx}. {topic}")
+    # Ensure the directory for articles exists, if not, create it
+    article_directory = "articles"
+    if not os.path.exists(article_directory):
+        os.makedirs(article_directory)
+
+    for idx, (topic, internal_links) in enumerate(tqdm(get_topic_and_links("keywords.csv")), start=1):
+        print(f"\nProcessing {idx}. {topic}")
         conversation_history = ""
+        
+        # Generate an outline for the article
         outline, conversation_history = make_api_call(f"Create an outline for an article on the topic of {topic} using the following internal links: {', '.join(internal_links)}.", 2048, conversation_history)
         if outline is None:
-            continue  # Skip this topic if the request timed out
-        first_third, conversation_history = make_api_call(f"Based on the outline:\n{outline}\nWrite the part of the article from token 0 to token {len(outline) // 3}.", (len(outline) // 3), conversation_history)
-        second_third, conversation_history = make_api_call(f"Based on the outline:\n{outline}\nWrite the part of the article from token {len(outline) // 3} to token {(2 * len(outline)) // 3}.", ((2 * len(outline)) // 3) - (len(outline) // 3), conversation_history)
-        final_third, conversation_history = make_api_call(f"Based on the outline:\n{outline}\nWrite the part of the article from token {(2 * len(outline)) // 3} to token {len(outline)}.", len(outline) - ((2 * len(outline)) // 3), conversation_history)
-        article = f"{first_third}{second_third}{final_third}"
+            continue  # Skip this topic if the request failed
+
+        # Generate the full article
+        article, conversation_history = make_api_call(f"Write an article based on the outline:\n{outline}", 2048, conversation_history)
+        if article is None:
+            continue  # Skip this topic if the request failed
+
+        # Generate an image
+        image_url = generate_image(f"An image illustrating the concept of {topic}")
+        if image_url is None:
+            continue  # Skip this topic if image generation failed
+        image_markdown = f"![Image related to {topic}]({image_url})\n\n"
+
+        # Generate a key takeaways table for the article
         table, conversation_history = make_api_call(f"Create a key takeaways table summarizing the following article:\n{article}", 2048, conversation_history)
-        with open(f"{idx}. {topic}.txt", "w") as file:
-            file.write(f"# {topic}\n\n{article}\n\n## Key Takeaways\n{table}")
+        if table is None:
+            continue  # Skip this topic if the request failed
+
+        # Write the article and the table to a file
+        sanitized_topic = sanitize_filename(topic)
+        with open(os.path.join(article_directory, f"{idx}. {sanitized_topic}.md"), "w", encoding='utf-8') as file:
+            file.write(f"# {topic}\n\n{article}\n\n{image_markdown}## Key Takeaways\n{table}")
+
         print(f"Completed {idx}. {topic}")
 
 if __name__ == "__main__":
