@@ -7,25 +7,25 @@ from tqdm import tqdm
 import requests
 
 # Initialize the OpenAI API client
-openai.api_key = "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"
+openai.api_key = "your-api-key"
 
 # Constants
 AI_CHARACTER_FILE = "Spinnerette.txt"
-KEYWORDS_FILE = "FlyingWeb-keywords.csv"
+KEYWORDS_FILE = "keywords.csv"
 
 # Website Settings
-WEBSITE = "flyingweb.ie"
-EXAMPLE_INTERNAL_LINKS = "[website design](https://www.flyingweb.ie/services/website-design)"
+WEBSITE = "yourwebsite.com"
+EXAMPLE_INTERNAL_LINKS = "[website design](https://www.yourwebsite.com/category/page/)"
 
 # Save Directory
 SAVE_DIRECTORY = "articles"
 
 # Language Settings
-LANGUAGE = "Italian"
+LANGUAGE = "English"
 
 # Image Style
-ELEMENTS = "websites, office, people, computers, phones"
-FEATURES = "vibrant colors, realistic elements, natural lighting"
+ELEMENTS = "realistic details, natural lighting, vibrant colors"
+FEATURES = "the subject, the setting, the mood"
 
 #['256x256', '512x512', '1024x1024', '1024x1792', '1792x1024'] - 'size'
 IMAGE_SIZE = "1792x1024"
