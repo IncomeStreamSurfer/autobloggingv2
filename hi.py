@@ -20,7 +20,7 @@ def make_api_call(prompt, max_tokens, conversation_history="", retries=3, delay=
     for attempt in range(retries):
         try:
             response = openai.ChatCompletion.create(
-                model="gpt-4-1106-preview",
+                model="gpt-5.6-sol",
                 messages=[
                     {
                         "role": "system",
